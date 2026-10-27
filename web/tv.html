@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projector · AAE4203 GNSS Benchmark Challenge</title>
+<link rel="stylesheet" href="/static/assets/app.css">
+<style>
+  :root {
+    --tv-bg:   #080d16;
+    --tv-bg-2: #0e1626;
+    --tv-line: rgba(255,255,255,.09);
+    --tv-ink:  #eef2f7;
+    --tv-dim:  #8fa0b8;
+    --tv-red:  #ff3b57;
+    --tv-gold: #f6c445;
+  }
+  body { background: var(--tv-bg); color: var(--tv-ink); overflow: hidden; }
+  .tv { height: 100vh; display: grid; grid-template-rows: auto auto 1fr auto;
+        gap: 14px; padding: 22px 30px 16px; }
+  .tv-head { display: flex; align-items: center; gap: 20px; }
+  .tv-head .t1 { font-size: 30px; font-weight: 750; letter-spacing: -.02em; }
+  .tv-head .t2 { font-size: 14px; color: var(--tv-dim); letter-spacing: .14em;
+                 text-transform: uppercase; }
+  .tv-clock { margin-left: auto; text-align: right; }
+  .tv-clock .time { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums;
+                    letter-spacing: -.02em; }
+  .tv-clock .sub { font-size: 12.5px; color: var(--tv-dim); letter-spacing: .1em;
+                   text-transform: uppercase; }
+
+  .podium { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .podium .p {
+    background: linear-gradient(180deg, var(--tv-bg-2), rgba(14,22,38,.35));
+    border: 1px solid var(--tv-line); border-radius: 14px;
+    padding: 14px 20px; display: flex; align-items: center; gap: 16px;
+    position: relative; overflow: hidden;
+  }
+  .podium .p::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  }
+  .podium .p1::before { background: var(--tv-gold); }
+  .podium .p2::before { background: #b9c4d3; }
+  .podium .p3::before { background: #c98a4b; }
+  .podium .medal { font-size: 40px; font-weight: 800; line-height: 1;
+                   font-variant-numeric: tabular-nums; }
+  .podium .p1 .medal { color: var(--tv-gold); }
+  .podium .p2 .medal { color: #b9c4d3; }
+  .podium .p3 .medal { color: #c98a4b; }
+  .podium .code { font-family: var(--mono); font-size: 34px; font-weight: 800; letter-spacing: -.01em; }
+  .podium .who { min-width: 0; }
+  .podium .m { font-size: 13px; color: var(--tv-dim); overflow: hidden;
+               text-overflow: ellipsis; white-space: nowrap; max-width: 300px; }
+  .podium .score { margin-left: auto; text-align: right; }
+  .podium .score .v { font-size: 32px; font-weight: 800; font-variant-numeric: tabular-nums;
+                      letter-spacing: -.02em; color: var(--tv-red); }
+  .podium .score .u { font-size: 12px; color: var(--tv-dim); letter-spacing: .08em; }
+  .podium .empty { color: #475569; font-size: 16px; font-style: italic; }
+  .podium .p.empty-pod { opacity: .45; }
+
+  .tv-table { min-height: 0; overflow: hidden; }
+  table.big { width: 100%; border-collapse: collapse; font-size: 17px; }
+  table.big th {
+    text-align: right; font-size: .72em; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: #6b7c94; padding: .45em .9em;
+    border-bottom: 1px solid var(--tv-line); white-space: nowrap;
+  }
+  table.big th:first-child { text-align: center; width: 4em; }
+  table.big th.l, table.big td.l { text-align: left; }
+  table.big td { padding: .4em .9em; border-bottom: 1px solid rgba(255,255,255,.05);
+                 text-align: right; font-variant-numeric: tabular-nums; }
+  table.big td.rank { text-align: center; font-weight: 800; font-size: 1.2em; color: #64748b; }
+  table.big tr.top1 td.rank { color: var(--tv-gold); }
+  table.big tr.top2 td.rank { color: #b9c4d3; }
+  table.big tr.top3 td.rank { color: #c98a4b; }
+  table.big td.g { font-family: var(--mono); font-weight: 800; font-size: 1.25em;
+                   letter-spacing: -.01em; }
+  table.big td.m2 { font-size: 1.25em; font-weight: 750; color: #fff; }
+  table.big td.m3, table.big td.mp { font-size: 1.02em; font-weight: 600; color: #b6c4d6; }
+  table.big td.av { font-size: .95em; font-weight: 650; color: #b6c4d6; }
+  table.big td.ver { font-size: .82em; color: var(--tv-dim); max-width: 26em;
+                     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  table.big tr.fail td { color: #55657c; }
+  table.big tr.fail td.g, table.big tr.fail td.m2 { color: #7b8a9e; }
+  table.big tr.fail td.rank { font-size: .9em; }
+  table.big tr.section td {
+    text-align: left; padding: .55em .9em; color: #6b7c94; font-size: .72em;
+    letter-spacing: .1em; text-transform: uppercase;
+    border-top: 1px solid var(--tv-line); border-bottom: 1px solid var(--tv-line);
+  }
+  .flagline td { font-size: 13px; color: #8b6a2e; padding-top: 0; border: 0; }
+  .tv-foot { display: flex; gap: 24px; font-size: 12.5px; color: #55657c;
+             border-top: 1px solid var(--tv-line); padding-top: 10px; }
+  .tv-foot .k { color: #8fa0b8; font-weight: 600; }
+  .live-tv { display: inline-flex; align-items: center; gap: 8px; font-size: 13px;
+             color: #8fa0b8; letter-spacing: .08em; text-transform: uppercase; }
+  .frozen-tv { color: var(--tv-gold); font-weight: 700; letter-spacing: .12em; }
+  .tv { background: radial-gradient(ellipse at 90% 0%, #18334b, transparent 65%); }
+  .tv-head { padding-bottom: 14px; border-bottom: 1px solid var(--tv-line); }
+  .tv-head .t1 { font-size: clamp(20px, 2vw, 34px); }
+  .tv-table { overflow: auto; }
+  .podium .p1 { background: linear-gradient(135deg, #363326, #142136); }
+  .podium .score .v { color: #fff; }
+  table.big tr.top1 { background: rgba(246,196,69,.045); }
+  table.big th { color: #9baec6; }
+  @media (max-width: 950px) {
+    body { overflow: auto; }
+    .tv { height: auto; min-height: 100vh; padding: 22px 18px; }
+    .tv-head { align-items: flex-start; }
+    .tv-head .t2 { font-size: 10px; letter-spacing: .06em; margin-top: 8px; }
+    .tv-clock .time { font-size: 24px; }
+    .podium { grid-template-columns: 1fr; gap: 8px; }
+    .podium .p { padding: 14px 18px; }
+    table.big { min-width: 780px; }
+    .tv-foot { flex-wrap: wrap; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="tv">
+  <div class="tv-head">
+    <div>
+      <div class="t1" id="tvTitle">GNSS Benchmark Challenge</div>
+      <div class="t2" id="tvSub">AAE4203 · Week 9</div>
+    </div>
+    <div class="tv-clock">
+      <div class="time" id="clock">--:--:--</div>
+      <div class="sub" id="clockSub">Hong Kong time</div>
+    </div>
+  </div>
+
+  <div class="podium" id="podium"></div>
+
+  <div class="tv-table"><table class="big" id="table"></table></div>
+
+  <div class="tv-foot">
+    <span><span class="k">Benchmark</span> <span id="fBench">–</span></span>
+    <span><span class="k">Ranked when</span> availability ≥ <span id="fThresh">90</span>%</span>
+    <span><span class="k">Updated</span> <span id="fUpdated">–</span></span>
+    <span style="margin-left:auto" class="live-tv">
+      <span class="dot" id="liveDot"></span><span id="liveText">live</span>
+      <span class="frozen-tv" id="frozenFlag" hidden>· FINAL</span>
+    </span>
+  </div>
+</div>
+
+<script src="/static/assets/app.js"></script>
+<script>
+(function () {
+  const el = (id) => document.getElementById(id);
+  let lastRows = 0;
+
+  function tick() {
+    const now = new Date();
+    el('clock').textContent = now.toLocaleTimeString('en-GB', { hour12: false,
+      timeZone: 'Asia/Hong_Kong' });
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  function fitTable() {
+    // Binary-search the table font size until the rows fill the available
+    // height without overflowing.  Every size inside the table is in em, so
+    // font-size is the single knob.
+    const box = document.querySelector('.tv-table');
+    const table = el('table');
+    if (!box || !table) return;
+    if (window.innerWidth <= 950) {
+      table.style.fontSize = '15px';
+      return;
+    }
+    const available = box.clientHeight;
+    if (!available) return;
+
+    const height = (px) => {
+      table.style.fontSize = px + 'px';
+      return table.getBoundingClientRect().height;
+    };
+
+    let lo = 8;
+    let hi = 30;
+    let best = 8;
+    for (let i = 0; i < 12; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (height(mid) <= available) { best = mid; lo = mid; } else { hi = mid; }
+    }
+    table.style.fontSize = best.toFixed(1) + 'px';
+  }
+
+  window.addEventListener('resize', () => { if (window.__tvRows) fitTable(); });
+
+  function renderPodium(ranked) {
+    const slots = [0, 1, 2].map((i) => ranked[i]);
+    el('podium').innerHTML = slots.map((row, index) => {
+      if (!row) {
+        return `<div class="p empty-pod"><span class="empty">waiting for rank ${index + 1}</span></div>`;
+      }
+      return `<div class="p p${index + 1}">
+        <div class="medal">${index + 1}</div>
+        <div class="who">
+          <div class="code">${row.group}</div>
+          <div class="m">${BENCH.esc(row.method_label || 'method not declared')}</div>
+        </div>
+        <div class="score">
+          <div class="v">${BENCH.fmt(row.rmse2d, 2)}</div>
+          <div class="u">M 2D RMSE</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderTable(data) {
+    const ranked = data.rows.filter((r) => r.is_ranked)
+      .sort((a, b) => a.rank - b.rank);
+    const others = data.rows.filter((r) => !r.is_ranked && r.status !== 'none')
+      .sort((a, b) => {
+        const aOk = a.status === 'ok' ? 0 : 1;
+        const bOk = b.status === 'ok' ? 0 : 1;
+        if (aOk !== bOk) return aOk - bOk;
+        const ar = a.rmse2d == null ? Infinity : a.rmse2d;
+        const br = b.rmse2d == null ? Infinity : b.rmse2d;
+        return ar !== br ? ar - br : a.group.localeCompare(b.group);
+      });
+    const head = `<thead><tr>
+      <th>#</th><th class="l">Group</th><th class="l">Version</th>
+      <th>2D RMSE</th><th>3D RMSE</th><th>2D P95</th><th>Avail</th>
+    </tr></thead>`;
+
+    const rowHtml = (row, fail) => {
+      const cls = fail ? 'fail' : (row.rank === 1 ? 'top1' : row.rank === 2 ? 'top2'
+                        : row.rank === 3 ? 'top3' : '');
+      const rankText = fail ? '–' : row.rank;
+      const version = row.status === 'invalid'
+        ? (row.error_message ? 'rejected — ' + row.error_message : 'file rejected')
+        : (row.method_label || '—');
+      return `<tr class="${cls}">
+        <td class="rank">${rankText}</td>
+        <td class="l g">${row.group}</td>
+        <td class="l ver" title="${BENCH.esc(version)}">${BENCH.esc(version)}</td>
+        <td class="m2">${BENCH.fmt(row.rmse2d, 2)}</td>
+        <td class="m3">${BENCH.fmt(row.rmse3d, 2)}</td>
+        <td class="mp">${BENCH.fmt(row.p95_2d, 2)}</td>
+        <td class="av">${row.availability === null ? '–' : BENCH.fmt(row.availability, 1) + '%'}</td>
+      </tr>`;
+    };
+
+    let body = ranked.map((row) => rowHtml(row, false)).join('');
+    if (others.length) {
+      body += `<tr class="section"><td colspan="7">not ranked</td></tr>`;
+      body += others.map((row) => rowHtml(row, true)).join('');
+    }
+    if (!ranked.length && !others.length) {
+      body = `<tr><td colspan="7" style="text-align:center;padding:60px;color:#475569;
+              font-size:22px">waiting for the first submission …</td></tr>`;
+    }
+    el('table').innerHTML = head + `<tbody>${body}</tbody>`;
+    window.__tvRows = ranked.length + others.length;
+    requestAnimationFrame(fitTable);
+  }
+
+  async function load() {
+    try {
+      const data = await BENCH.api('/api/leaderboard');
+      const c = data.challenge;
+      el('tvTitle').textContent = c.name || 'GNSS Benchmark Challenge';
+      el('tvSub').textContent = `AAE4203 · Week 9 · ${data.n_ranked} ranked of ${data.n_groups} groups`;
+      el('fBench').textContent = `${c.n_gt_epochs} epochs · GPS week ${(c.gps_week || []).join(', ')} · ${(c.duration_s / 60).toFixed(0)} min`;
+      el('fThresh').textContent = c.availability_min.toFixed(0);
+      el('fUpdated').textContent = data.updated_at;
+      el('frozenFlag').hidden = !data.frozen;
+      renderPodium(data.rows.filter((r) => r.is_ranked)
+        .sort((a, b) => a.rank - b.rank));
+      renderTable(data);
+    } catch (err) {
+      el('liveText').textContent = 'disconnected';
+      el('liveDot').classList.add('off');
+    }
+  }
+
+  const refresh = BENCH.debounce(load, 200);
+  BENCH.connect((payload) => {
+    el('liveDot').classList.remove('off');
+    if (payload.type !== 'hello') refresh();
+  }, (up) => {
+    el('liveDot').classList.toggle('off', !up);
+    el('liveText').textContent = up ? 'live' : 'reconnecting…';
+  });
+
+  load();
+  setInterval(refresh, 30000);
+})();
+</script>
+</body>
+</html>

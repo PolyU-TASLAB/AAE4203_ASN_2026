@@ -1,0 +1,4 @@
+# Only needed for [sources] kind = "gdrive_api".
+# The Drive REST calls use urllib; these two packages only mint the OAuth token.
+google-auth>=2.23
+requests>=2.31

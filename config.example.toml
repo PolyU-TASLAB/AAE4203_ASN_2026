@@ -1,0 +1,101 @@
+# =============================================================================
+#  AAE4203 GNSS Benchmark Challenge - configuration
+#  Python 3.11+ (uses tomllib).  Edit this file, then restart the server.
+# =============================================================================
+
+[server]
+# 0.0.0.0 makes the leaderboard reachable from other machines on the campus LAN.
+host        = "0.0.0.0"
+port        = 8080
+page_title  = "AAE4203 - GNSS Benchmark Challenge"
+# Token for the /admin console.  CHANGE THIS before the lab session.
+# Can also be supplied via the environment variable AAE4203_ADMIN_TOKEN.
+admin_token = "change-me-please"
+# Display timezone for "last upload" columns and the version log.
+timezone    = "Asia/Hong_Kong"
+
+# -----------------------------------------------------------------------------
+# Which dataset, and how tight the ranking rules are.
+# These defaults mirror slides 32-35 of the lab deck.
+# -----------------------------------------------------------------------------
+[challenge]
+key             = "benchmark"
+name            = "UrbanNav Whampoa - SPP Benchmark"
+# Private reference trajectory.  NEVER serve this file over HTTP.
+gt_file         = "data/ground_truth/whampoa.private.csv"
+# Slide 32: "Ranked only if availability A >= 90 %".
+availability_min = 90.0
+# GT epochs with quality flag above this are dropped when the GT is built.
+# 1 = fixed RTK, 5 = ...;  set to 5 to keep every epoch.
+max_quality     = 5
+# Epoch matching: quantise gps_tow_s onto this grid before matching.
+# 0.1 s matches the "at least 1 decimal" requirement of the CSV spec.
+match_grid_s    = 0.1
+# If an epoch is not on the grid, snap it to the nearest GT epoch when the
+# offset is smaller than this.  Set to 0 to disable and require exact keys.
+lenient_tolerance_s = 0.0
+# Display origin only. Scoring uses the reference position at each epoch (Section 9.3).
+enu_origin      = "auto"
+# Accept GXX_owndata.csv as well (format-checked, not ranked).
+enable_owndata  = true
+
+# -----------------------------------------------------------------------------
+# Where submissions arrive from.  kind = "local_mirror" or "gdrive_api".
+# -----------------------------------------------------------------------------
+[sources]
+kind = "local_mirror"
+
+# --- Option A: a Google Drive for Desktop mirrored folder (recommended) ------
+# Google Drive for Desktop keeps "My Drive/.../AAE4203" as a normal local
+# folder.  Point root at it.  No credentials, no network code, survives an
+# internet outage (the mirror simply stops updating).
+[sources.local_mirror]
+root           = "drive_mirror"
+include_owndata = true
+
+# --- Option B: Google Drive REST API v3 with a service account --------------
+# 1. Create a service account in Google Cloud, enable the Drive API.
+# 2. Download its JSON key to credentials_file below.
+# 3. In Google Drive, share the TA folder with the service account e-mail
+#    (Viewer is enough).
+# 4. Put the folder id (from the folder URL) in root_folder_id.
+# Requires:  pip install -r requirements-drive.txt
+[sources.gdrive_api]
+root_folder_id  = ""
+credentials_file = "secrets/gdrive-service-account.json"
+include_owndata = true
+# Only files modified after this many seconds ago are considered on the first
+# pass; set to 0 to always scan everything.
+initial_lookback_s = 0
+
+# -----------------------------------------------------------------------------
+# Groups.  Folders found on disk that match the pattern are added automatically.
+# -----------------------------------------------------------------------------
+[groups]
+prefix = "G"
+count  = 20
+width  = 2
+
+# -----------------------------------------------------------------------------
+# Polling
+# -----------------------------------------------------------------------------
+[polling]
+interval_s   = 10      # how often to look for changed files
+# A file must be byte-stable for this long before it is read, so we never
+# evaluate a half-uploaded CSV.
+settle_s     = 2
+
+# -----------------------------------------------------------------------------
+# Fair-play checks (slide 32).  Flags only - never changes a score.
+# -----------------------------------------------------------------------------
+[fairplay]
+enabled                = true
+implausible_rmse2d_m   = 1.0   # SPP from pseudoranges cannot be sub-metre
+gt_leak_max_3d_m       = 0.30  # looks like the true trajectory was used
+flag_identical_copies  = true  # byte-identical uploads from two groups
+
+# -----------------------------------------------------------------------------
+# Demo / rehearsal mode.  Leave [demo] out for a real session.
+# -----------------------------------------------------------------------------
+# [demo]
+# enabled = true

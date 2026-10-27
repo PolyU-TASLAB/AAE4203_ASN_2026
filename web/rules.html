@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rules · AAE4203 GNSS Benchmark Challenge</title>
+<link rel="stylesheet" href="/static/assets/app.css">
+<style>
+  main { max-width: 1020px; }
+  .rule-card { background: var(--surface); border: 1px solid var(--line);
+               border-radius: var(--radius); padding: 4px 28px 24px; box-shadow: var(--shadow); }
+  .prose pre {
+    background: #0f172a; color: #d6e0ef; padding: 14px 16px; border-radius: var(--radius-s);
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.6; overflow-x: auto;
+  }
+  .prose pre code { background: none; color: inherit; padding: 0; }
+  .num-list { counter-reset: step; list-style: none; padding-left: 0; }
+  .num-list li { counter-increment: step; position: relative; padding-left: 40px;
+                 margin-bottom: 12px; }
+  .num-list li::before {
+    content: counter(step); position: absolute; left: 0; top: 0;
+    width: 26px; height: 26px; border-radius: 8px; background: var(--accent-soft);
+    color: var(--accent); font-weight: 700; font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .danger { border-left-color: var(--bad); background: var(--bad-soft); }
+  .danger p { color: #7a1a12; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-title">GNSS Benchmark Challenge</span>
+      <span class="brand-sub">submission rules</span>
+    </div>
+    <nav class="topnav">
+      <a href="/">Leaderboard</a>
+      <a href="/rules" class="active">Rules</a>
+      <a href="/tv">Projector</a>
+      <a href="/admin">Admin</a>
+    </nav>
+    <span class="live"><span class="dot"></span><span>live board</span></span>
+  </div>
+</header>
+
+<main>
+  <div class="rule-card prose">
+
+    <p class="eyebrow" style="margin-top:26px">AAE4203 · Tutorial Section 9 · Slides 32–35</p>
+    <h1>Submission guide</h1>
+    <p>Submit <b>both CSV files</b> to your assigned group folder. Official groups are <b>G01–G20</b>.
+       Only the benchmark file is scored for the leaderboard; your own-data file is still required.</p>
+    <p><a class="btn primary" href="https://drive.google.com/drive/folders/1IxPmQCfAS_fVZEcn9TMloStXUjBWLSov?usp=drive_link" target="_blank" rel="noopener noreferrer">Open Google Drive · TA folder ↗</a></p>
+
+    <h2>1 · What to submit</h2>
+    <table><thead><tr><th>File</th><th>Purpose</th><th>Required?</th></tr></thead><tbody>
+      <tr><td><code>GXX_benchmark.csv</code></td><td>Positions computed from the benchmark observations; ranked by accuracy</td><td>Yes</td></tr>
+      <tr><td><code>GXX_owndata.csv</code></td><td>Positions computed from your group's own field data; format checked, not ranked</td><td>Yes</td></tr>
+      <tr><td><code>GXX_version.txt</code></td><td>One line describing your algorithm; shown in the Version column</td><td>Optional platform feature</td></tr>
+    </tbody></table>
+    <p>Replace <code>XX</code> with your two-digit group number. For group 5:</p>
+    <pre><code>TA folder/
+  G05/
+    G05_benchmark.csv
+    G05_owndata.csv
+    G05_version.txt</code></pre>
+    <p>The filename must match the group folder. Do not upload into the TA folder root or another group's folder.
+       Names such as <code>G05_benchmark (1).csv</code> and <code>G05_benchmark_old.csv</code> are ignored.</p>
+
+    <h2>2 · Exact CSV format</h2>
+    <p>Save a comma-separated text file with this exact header and exactly five columns, in this order.
+       Use one row per solved epoch, sorted by GPS week and time of week. Do not repeat timestamps.</p>
+    <pre><code>gps_week,gps_tow_s,x_ecef_m,y_ecef_m,z_ecef_m
+2442,460800.0,-2418202.586,5385847.524,2405648.799
+2442,460801.0,-2418202.174,5385847.238,2405648.952</code></pre>
+    <div class="callout"><p><b>These are illustrative values from the course materials, not an answer file.</b>
+      Use the GPS week, times and computed coordinates of your actual dataset. Do not copy GPS week 2442 into your results.
+      <span id="datasetHint">Check the current benchmark epoch information on the leaderboard.</span></p></div>
+    <table><thead><tr><th>Column</th><th>Required format</th></tr></thead><tbody>
+      <tr><td><code>gps_week</code></td><td>Integer GPS week, e.g. <code>2442</code>; no decimal point</td></tr>
+      <tr><td><code>gps_tow_s</code></td><td>Seconds of GPS week, at least one decimal; 0 ≤ value &lt; 604800</td></tr>
+      <tr><td><code>x_ecef_m</code></td><td>WGS-84 ECEF X in metres, exactly 3 decimal places</td></tr>
+      <tr><td><code>y_ecef_m</code></td><td>WGS-84 ECEF Y in metres, exactly 3 decimal places</td></tr>
+      <tr><td><code>z_ecef_m</code></td><td>WGS-84 ECEF Z in metres, exactly 3 decimal places</td></tr>
+    </tbody></table>
+    <ul><li>No latitude/longitude/height, centimetres, millisecond time tags, NaN, infinity, extra index columns or trailing commas.</li>
+      <li>Use a normal minus sign <code>-</code> for negative numbers and decimal notation, not scientific notation.</li>
+      <li>Omit epochs without a solution rather than writing zero or NaN positions. Missing epochs reduce availability.</li>
+      <li>Both benchmark and own-data files follow the same five-column format. Their timestamps may differ.</li></ul>
+    <h3>Check before uploading</h3>
+    <p>From the project root, run:</p>
+    <pre><code>python tools/check_submission.py G05_benchmark.csv G05_owndata.csv</code></pre>
+    <p>If the TA gives you the standalone checker, run <code>python check_submission.py G05_benchmark.csv G05_owndata.csv</code>
+       in its folder. Fix all format errors. Dataset-specific time warnings for own data should be checked against your recording;
+       passing a format check does not guarantee a rank or an accurate solution.</p>
+
+    <h2>3 · Upload and improve</h2>
+    <ol class="num-list"><li>Verify each algorithm version on the example dataset first.</li>
+      <li>Export and check both CSV files, then upload them to your group folder using the Drive link above.</li>
+      <li>Keep the leaderboard open. The server scans every 10 seconds by default after Drive Desktop syncs the upload;
+          synchronization adds its own delay.</li>
+      <li>Replace the existing benchmark file whenever you improve the solution. Do not create a second copy with the same name.</li>
+      <li>Record the method and result for each version in your report's ablation table.</li></ol>
+    <div class="callout danger"><p><b>Latest file, not best-ever score.</b> A worse or invalid replacement supersedes your earlier result.
+      Keep the intended final files in the folder through the deadline announced on Blackboard. A rank does not mean both required files have been submitted.</p></div>
+    <p>The tutorial schedules a preliminary leaderboard at about <b>2:50 from the session start</b>.
+       The teaching team publishes the final leaderboard on Blackboard using the deadline submissions.</p>
+
+    <h2>4 · How ranking works</h2>
+    <p>Epochs are matched by GPS week and time of week on a <b>0.1-second grid</b>.
+       Errors are rotated into East–North–Up at the reference position <b>of each matched epoch</b>.</p>
+    <pre><code>Availability A = 100 × matched epochs / reference epochs
+2D RMSE = sqrt(mean(East_error² + North_error²))
+3D RMSE = sqrt(mean(East_error² + North_error² + Up_error²))
+2D P95  = 95th percentile of sqrt(East_error² + North_error²)</code></pre>
+    <ul><li>Only valid benchmark submissions with <b>A ≥ 90%</b> receive a rank.</li>
+      <li>Lowest <b>2D RMSE</b> first; ties are broken by <b>3D RMSE</b>.</li>
+      <li>The leaderboard shows Rank, Group, Version, 2D RMSE, 3D RMSE, 2D P95 and Availability.</li>
+      <li>For example, 8.9 m error with 71% availability is <b>not ranked</b>, even if its error is lower than another group's.</li>
+      <li>Your own-data CSV is required for submission completeness but is not part of the benchmark ranking gate.</li></ul>
+
+    <h2>5 · Before the deadline</h2>
+    <ul><li>Both required CSV files are present in your own group folder and pass the format checks.</li>
+      <li>Your GitHub repository reproduces both CSV files. The teaching team may re-run your code.</li>
+      <li>Your report includes the methods tried, results, final metrics and the required AI-use statement.</li>
+      <li>Check Blackboard for the deadline, final leaderboard and how rank contributes to your mark.</li></ul>
+    <p style="margin-top:26px"><a href="/">← Back to the leaderboard</a></p>
+  </div>
+</main>
+
+<footer class="page-foot"><span>AAE4203 · GNSS Positioning Laboratory</span></footer>
+<script>
+fetch('/api/status').then(r => r.json()).then(data => {
+  const c = data.challenge;
+  document.getElementById('datasetHint').textContent =
+    ` Current benchmark: GPS week ${(c.gps_week || []).join(', ')}, ${c.n_gt_epochs} reference epochs; time of week ${c.tow_start}–${c.tow_end} s.`;
+}).catch(() => {});
+</script>
+</body>
+</html>

@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Group · AAE4203 GNSS Benchmark Challenge</title>
+<link rel="stylesheet" href="/static/assets/app.css">
+<style>
+  .hero { display: flex; align-items: flex-end; gap: 18px; margin-bottom: 18px; flex-wrap: wrap; }
+  .hero .code { font-family: var(--mono); font-size: 40px; font-weight: 700; letter-spacing: -.01em; line-height: 1; }
+  .hero .rankpill {
+    display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px;
+    border-radius: 999px; background: var(--surface); border: 1px solid var(--line);
+    font-size: 14px; font-weight: 600;
+  }
+  .hero .method-line { color: #d5e2ec; font-size: 14px; }
+  .panel-err {
+    border-left: 3px solid var(--bad); background: var(--bad-soft);
+    padding: 12px 16px; border-radius: 0 var(--radius-s) var(--radius-s) 0;
+    margin-bottom: 16px; color: #7a1a12; font-size: 13.5px;
+  }
+  .panel-err b { display: block; margin-bottom: 4px; letter-spacing: .04em;
+                 text-transform: uppercase; font-size: 11px; }
+  .grid2 { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
+  .hist { display: block; overflow-x: auto; max-width: 100%; }
+  .hist td, .hist th { font-size: 13px; }
+  .hist tbody tr { cursor: default; }
+  .nowrap { white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-title">GNSS Benchmark Challenge</span>
+      <span class="brand-sub" id="groupSub">group detail</span>
+    </div>
+    <nav class="topnav">
+      <a href="/">Leaderboard</a>
+      <a href="/rules">Rules</a>
+      <a href="/tv">Projector</a>
+      <a href="/admin">Admin</a>
+    </nav>
+    <span class="live"><span class="dot" id="liveDot"></span><span id="liveText">live</span></span>
+  </div>
+</header>
+
+<main>
+  <div class="hero" id="hero"></div>
+  <div id="errPanel"></div>
+  <div class="stat-row" id="stats"></div>
+
+  <div class="grid2" id="chartsGrid">
+    <section class="card">
+      <div class="card-head"><h2>East / North / Up error versus time</h2></div>
+      <div class="card-body"><div class="chart tall" id="chartTime"></div></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Horizontal error scatter (East vs North)</h2></div>
+      <div class="card-body"><div class="chart tall" id="chartEN"></div></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Cumulative distribution of 2D error</h2></div>
+      <div class="card-body"><div class="chart" id="chartCDF"></div></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>2D error histogram</h2></div>
+      <div class="card-body"><div class="chart" id="chartHist"></div></div>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:16px">
+    <div class="card-head">
+      <h2>Version log</h2>
+      <span class="chip mute" id="versionCount">–</span>
+      <div class="spacer"></div>
+      <a class="btn" id="downloadLog" href="#" download>Download version log (CSV)</a>
+    </div>
+    <div id="owndataWrap"></div>
+    <div id="historyWrap"></div>
+  </section>
+</main>
+
+<footer class="page-foot">
+  <span>AAE4203 · GNSS Positioning Laboratory · benchmark challenge</span>
+  <span id="footStamp"></span>
+</footer>
+
+<script src="/static/assets/echarts.min.js"></script>
+<script src="/static/assets/app.js"></script>
+<script>
+(function () {
+  const GROUP = (location.pathname.split('/').filter(Boolean).pop() || '').toUpperCase();
+  const charts = {};
+  let detail = null;
+
+  const el = (id) => document.getElementById(id);
+
+  function chart(key, domId) {
+    if (!charts[key]) charts[key] = BENCH.chart(el(domId));
+    return charts[key];
+  }
+
+  // ---------------------------------------------------------------- header
+  function renderHero(data) {
+    const row = data.row || {};
+    const ranked = row.is_ranked;
+    let chipClass = 'mute';
+    let chipText = 'No file yet';
+    if (row.status === 'invalid') { chipClass = 'bad'; chipText = 'Rejected'; }
+    else if (row.status === 'ok' && ranked) { chipClass = 'good'; chipText = `Rank ${row.rank}`; }
+    else if (row.status === 'ok') { chipClass = 'warn'; chipText = 'Not ranked'; }
+    el('groupSub').textContent = data.challenge.name;
+    el('hero').innerHTML = `
+      <div>
+        <div class="eyebrow">Group</div>
+        <div class="code">${BENCH.esc(data.group)}</div>
+      </div>
+      <span class="rankpill">
+        <span class="chip ${chipClass}">${chipText}</span>
+        ${row.n_matched ? `<span class="num">${row.n_matched} / ${data.n_gt} epochs</span>` : ''}
+      </span>
+      <div style="flex:1 1 320px;min-width:0">
+        <div class="eyebrow">Declared method</div>
+        <div class="method-line">${BENCH.esc(row.method_label || 'no method label declared')}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="eyebrow">Last upload</div>
+        <div class="method-line num">${BENCH.esc(row.received_at || '–')}</div>
+      </div>`;
+  }
+
+  function renderError(data) {
+    const row = data.row || {};
+    if (row.status === 'invalid' && row.error_message) {
+      el('errPanel').innerHTML = `
+        <div class="panel-err">
+          <b>Submission rejected</b>
+          ${BENCH.esc(row.error_message)}
+          ${row.last_good ? `<div style="margin-top:8px">Your last valid result was
+             <b>${BENCH.fmt(row.last_good.rmse2d, 3)} m</b> 2D RMSE from
+             ${BENCH.esc(row.last_good.received_at)}. Fix the file and upload again —
+             the leaderboard only shows your current file.</div>` : ''}
+        </div>`;
+      return;
+    }
+    if (row.status === 'ok' && !row.is_ranked) {
+      el('errPanel').innerHTML = `
+        <div class="panel-err" style="border-left-color:var(--warn);background:var(--warn-soft);color:#7a3c05">
+          <b>Not ranked</b>${BENCH.esc(row.unranked_reason)}
+        </div>`;
+      return;
+    }
+    if (row.suspicious) {
+      el('errPanel').innerHTML = `
+        <div class="panel-err" style="border-left-color:var(--warn);background:var(--warn-soft);color:#7a3c05">
+          <b>Flagged for review</b>${BENCH.esc(row.suspicious_reason)}
+        </div>`;
+      return;
+    }
+    el('errPanel').innerHTML = '';
+  }
+
+  function renderStats(data) {
+    const row = data.row || {};
+    const items = [
+      { label: '2D RMSE', value: `${BENCH.fmt(row.rmse2d, 3)}<small> m</small>` },
+      { label: '3D RMSE', value: `${BENCH.fmt(row.rmse3d, 3)}<small> m</small>` },
+      { label: '2D P95', value: `${BENCH.fmt(row.p95_2d, 3)}<small> m</small>` },
+      { label: 'Availability', value: `${BENCH.fmt(row.availability, 1)}<small> %</small>`,
+        foot: data.n_gt ? `${row.n_matched || 0} of ${data.n_gt} benchmark epochs matched` : '' },
+    ];
+    el('stats').innerHTML = items.map((item) => `
+      <div class="stat">
+        <div class="label">${item.label}</div>
+        <div class="value num">${item.value}</div>
+        ${item.foot ? `<div class="foot">${BENCH.esc(item.foot)}</div>` : ''}
+      </div>`).join('');
+  }
+
+  // ---------------------------------------------------------------- charts
+  function renderCharts(data) {
+    if (!window.echarts) return;
+    const series = data.series;
+    const row = data.row || {};
+
+    if (!series) {
+      el('chartsGrid').hidden = true;
+      if (!document.getElementById('fixHelp') && data.row && data.row.status === 'invalid') {
+        const panel = document.createElement('section');
+        panel.className = 'card';
+        panel.id = 'fixHelp';
+        panel.style.marginBottom = '16px';
+        panel.innerHTML = `
+          <div class="card-head"><h2>How to fix it</h2></div>
+          <div class="card-body" style="font-size:13.5px;color:var(--ink-2)">
+            <p style="margin-top:0">Your current file was not scored, so this group has
+               no ranking. The usual causes:</p>
+            <ul style="margin:0 0 10px;padding-left:18px;line-height:1.7">
+              <li>the header line is not exactly
+                  <code>gps_week,gps_tow_s,x_ecef_m,y_ecef_m,z_ecef_m</code>;</li>
+              <li>positions are in centimetres, or written as latitude / longitude
+                  / height instead of ECEF metres;</li>
+              <li><code>gps_tow_s</code> holds a unix time or seconds of day instead of
+                  seconds of the GPS week;</li>
+              <li>epochs do not match the benchmark times, so nothing can be paired.</li>
+            </ul>
+            <p style="margin:0">Run <code>python check_submission.py &lt;your file&gt;</code>
+               locally, fix it, and upload again. <a href="/rules">Full format rules →</a></p>
+          </div>`;
+        el('stats').insertAdjacentElement('afterend', panel);
+      }
+      return;
+    }
+    el('chartsGrid').hidden = false;
+    const help = document.getElementById('fixHelp');
+    if (help) help.remove();
+
+    const t0 = series.tow.length ? series.tow[0] : 0;
+    const minutes = series.tow.map((t) => ((t - t0) / 60).toFixed(2));
+
+    chart('time', 'chartTime').setOption(BENCH.baseChart({
+      grid: { left: 52, right: 18, top: 34, bottom: 40 },
+      legend: { top: 2, right: 6, itemWidth: 12, itemHeight: 8,
+                textStyle: { fontSize: 11, color: '#475467' } },
+      xAxis: Object.assign({}, BENCH.axisStyle, {
+        type: 'category', data: minutes,
+        name: 'minutes from start', nameLocation: 'middle', nameGap: 26,
+        nameTextStyle: { color: '#98a2b3', fontSize: 11 },
+        axisLabel: { color: '#98a2b3', fontSize: 10,
+                     interval: Math.max(1, Math.floor(minutes.length / 8)) },
+        splitLine: { show: false },
+      }),
+      yAxis: Object.assign({ type: 'value', name: 'error (m)',
+        nameTextStyle: { color: '#98a2b3', fontSize: 11 } }, BENCH.axisStyle),
+      tooltip: Object.assign({ trigger: 'axis' }, BENCH.baseChart().tooltip),
+      series: [
+        { name: 'East', type: 'line', data: series.de, showSymbol: false,
+          lineStyle: { width: 1.2, color: '#c8102e' }, itemStyle: { color: '#c8102e' } },
+        { name: 'North', type: 'line', data: series.dn, showSymbol: false,
+          lineStyle: { width: 1.2, color: '#16324f' }, itemStyle: { color: '#16324f' } },
+        { name: 'Up', type: 'line', data: series.du, showSymbol: false,
+          lineStyle: { width: 1.1, color: '#7c8794', type: 'dashed' },
+          itemStyle: { color: '#7c8794' } },
+      ],
+    }), true);
+
+    const rms = row.rmse2d || 0;
+    chart('en', 'chartEN').setOption(BENCH.baseChart({
+      grid: { left: 52, right: 20, top: 24, bottom: 40 },
+      xAxis: Object.assign({ type: 'value', name: 'East (m)', nameLocation: 'middle',
+        nameGap: 26, nameTextStyle: { color: '#98a2b3', fontSize: 11 },
+        scale: true }, BENCH.axisStyle),
+      yAxis: Object.assign({ type: 'value', name: 'North (m)',
+        nameTextStyle: { color: '#98a2b3', fontSize: 11 }, scale: true }, BENCH.axisStyle),
+      tooltip: Object.assign({}, BENCH.baseChart().tooltip, {
+        formatter: (p) => `E ${p.data[0].toFixed(2)} m<br/>N ${p.data[1].toFixed(2)} m`,
+      }),
+      series: [
+        { type: 'scatter', data: series.de.map((de, i) => [de, series.dn[i]]),
+          symbolSize: 2.6, itemStyle: { color: 'rgba(200,16,46,.55)' } },
+        { type: 'scatter', data: [[0, 0]], symbolSize: 9,
+          itemStyle: { color: '#16324f' }, z: 5 },
+        { type: 'scatter', data: [[0, rms], [rms, 0], [0, -rms], [-rms, 0]],
+          symbolSize: 4, itemStyle: { color: '#98a2b3' }, symbol: 'diamond' },
+      ],
+    }), true);
+
+    chart('cdf', 'chartCDF').setOption(BENCH.baseChart({
+      grid: { left: 48, right: 18, top: 24, bottom: 40 },
+      xAxis: Object.assign({ type: 'value', name: '2D error (m)', nameLocation: 'middle',
+        nameGap: 26, nameTextStyle: { color: '#98a2b3', fontSize: 11 } }, BENCH.axisStyle),
+      yAxis: Object.assign({ type: 'value', name: '%', max: 100,
+        nameTextStyle: { color: '#98a2b3', fontSize: 11 } }, BENCH.axisStyle),
+      tooltip: Object.assign({}, BENCH.baseChart().tooltip, {
+        formatter: (p) => `${p.data[0].toFixed(2)} m → ${p.data[1].toFixed(1)} % of epochs`,
+      }),
+      series: [{ type: 'line', data: series.cdf_e2d, showSymbol: false,
+        lineStyle: { width: 2, color: '#c8102e' }, itemStyle: { color: '#c8102e' },
+        areaStyle: { color: 'rgba(200,16,46,.07)' },
+        markLine: { silent: true, symbol: 'none',
+          lineStyle: { color: '#98a2b3', type: 'dashed' },
+          data: [{ yAxis: 95, label: { formatter: 'P95', fontSize: 10,
+                                       position: 'insideStartTop' } }] } }],
+    }), true);
+
+    const values = series.e2d.slice().sort((a, b) => a - b);
+    const bins = 26;
+    const lo = values.length ? values[0] : 0;
+    const hi = values.length ? values[values.length - 1] : 1;
+    const width = (hi - lo) / bins || 1;
+    const counts = new Array(bins).fill(0);
+    values.forEach((v) => {
+      const index = Math.min(bins - 1, Math.floor((v - lo) / width));
+      counts[index] += 1;
+    });
+    chart('hist', 'chartHist').setOption(BENCH.baseChart({
+      grid: { left: 48, right: 18, top: 24, bottom: 40 },
+      xAxis: Object.assign({}, BENCH.axisStyle, {
+        type: 'category',
+        data: counts.map((_, i) => (lo + width * (i + 0.5)).toFixed(1)),
+        name: '2D error (m)', nameLocation: 'middle', nameGap: 26,
+        nameTextStyle: { color: '#98a2b3', fontSize: 11 },
+        axisLabel: { color: '#98a2b3', fontSize: 9,
+                     interval: Math.max(0, Math.floor(bins / 9)) },
+        splitLine: { show: false },
+      }),
+      yAxis: Object.assign({ type: 'value', name: 'epochs',
+        nameTextStyle: { color: '#98a2b3', fontSize: 11 } }, BENCH.axisStyle),
+      tooltip: Object.assign({}, BENCH.baseChart().tooltip, {
+        formatter: (p) => `${p.name} m : ${p.value} epochs`,
+      }),
+      series: [{ type: 'bar', data: counts, barCategoryGap: '12%',
+        itemStyle: { color: '#16324f', borderRadius: [2, 2, 0, 0] } }],
+    }), true);
+  }
+
+  // ---------------------------------------------------------------- history
+  function renderHistory(data) {
+    const rows = data.history || [];
+    el('versionCount').textContent = `${rows.length} upload${rows.length === 1 ? '' : 's'}`;
+    el('downloadLog').href = `/api/group/${data.group}/history.csv`;
+
+    if (data.owndata) {
+      const own = data.owndata;
+      el('owndataWrap').innerHTML = `
+        <div style="padding:10px 18px;border-bottom:1px solid var(--line);
+                    background:var(--surface-2);font-size:13px;color:var(--ink-2)">
+          <b>Own-data file</b> — ${BENCH.esc(own.filename)}
+          <span class="chip ${own.status === 'ok' ? 'good' : 'bad'}"
+                style="margin-left:8px">${own.status === 'ok' ? 'format ok' : 'invalid'}</span>
+          <span class="num" style="margin-left:8px">${BENCH.esc(own.received_at)}</span>
+          <span style="color:var(--ink-3)"> · own data is format-checked but not ranked</span>
+        </div>`;
+    }
+
+    if (!data.owndata) {
+      el('owndataWrap').innerHTML = `<div class="callout"><p><b>Required file missing:</b>
+        upload ${BENCH.esc(data.group)}_owndata.csv to your group folder. Both CSV files are required;
+        only the benchmark determines your rank. <a href="/rules">Submission guide →</a></p></div>`;
+    }
+
+    if (!rows.length) {
+      el('historyWrap').innerHTML = '<div class="empty-state">No uploads from this group yet.</div>';
+      return;
+    }
+    el('historyWrap').innerHTML = `
+      <table class="board hist">
+        <thead><tr>
+          <th class="l">Uploaded</th><th class="l">File</th><th class="l">Version</th>
+          <th>2D RMSE (m)</th><th>3D RMSE (m)</th><th>2D P95 (m)</th>
+          <th>Availability</th><th class="l">Status</th>
+        </tr></thead>
+        <tbody>${rows.map((h) => {
+          const bad = h.status !== 'ok';
+          return `<tr class="${bad ? 'unranked' : ''}" style="cursor:default">
+            <td class="l num nowrap">${BENCH.esc(h.received_at)}</td>
+            <td class="l mono" style="font-size:12px">${BENCH.esc(h.filename)}</td>
+            <td class="l"><span class="method">${BENCH.esc(h.method_label || '–')}</span></td>
+            <td><span class="metric">${BENCH.fmt(h.rmse2d, 3)}</span></td>
+            <td><span class="metric">${BENCH.fmt(h.rmse3d, 3)}</span></td>
+            <td><span class="metric">${BENCH.fmt(h.p95_2d, 3)}</span></td>
+            <td><span class="pct">${h.availability === null ? '–' : BENCH.fmt(h.availability, 1) + '%'}</span></td>
+            <td class="l">${bad
+              ? `<span class="chip bad" title="${BENCH.esc(h.error_message)}">invalid</span>`
+              : (h.is_ranked ? '<span class="chip good">ranked</span>'
+                             : '<span class="chip warn">below threshold</span>')}
+              ${h.suspicious ? '<span class="flag" title="flagged">!</span>' : ''}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+  }
+
+  // ---------------------------------------------------------------- boot
+  async function load() {
+    try {
+      const data = await BENCH.api(`/api/group/${GROUP}`);
+      detail = data;
+      renderHero(data);
+      renderError(data);
+      renderStats(data);
+      renderCharts(data);
+      renderHistory(data);
+      el('footStamp').textContent = `updated ${data.row && data.row.received_at ? data.row.received_at : '–'}`;
+    } catch (err) {
+      el('hero').innerHTML = `<div class="panel-err"><b>Error</b>${BENCH.esc(err.message)}</div>`;
+    }
+  }
+
+  const refresh = BENCH.debounce(load, 300);
+  BENCH.connect((payload) => {
+    el('liveDot').classList.remove('off');
+    if (payload.type === 'hello') return;
+    refresh();
+  }, (up) => {
+    el('liveDot').classList.toggle('off', !up);
+    el('liveText').textContent = up ? 'live' : 'reconnecting…';
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

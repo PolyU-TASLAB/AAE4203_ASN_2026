@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leaderboard · AAE4203 GNSS Benchmark Challenge</title>
+<link rel="stylesheet" href="/static/assets/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark"></span>
+      <span class="brand-title" id="pageTitle">GNSS Benchmark Challenge</span>
+      <span class="brand-sub" id="challengeSub">AAE4203 · Week 9</span>
+    </div>
+    <nav class="topnav">
+      <a href="/" class="active">Leaderboard</a>
+      <a href="/rules">Rules</a>
+      <a href="/tv">Projector</a>
+      <a href="/admin">Admin</a>
+    </nav>
+    <span class="live" id="livePill">
+      <span class="dot" id="liveDot"></span>
+      <span id="liveText">live</span>
+    </span>
+  </div>
+</header>
+
+<main>
+  <section class="challenge-hero" aria-labelledby="challengeHeading">
+    <div>
+      <p class="hero-kicker">AAE4203 / WEEK 09 / LIVE CHALLENGE</p>
+      <h1 id="challengeHeading">Every epoch counts.</h1>
+      <p class="hero-description">Refine your positioning. Submit your solution. See where you stand.</p>
+    </div>
+    <a class="hero-link" href="/rules">Submission guide <span aria-hidden="true">↗</span></a>
+  </section>
+  <div id="freezeBanner" class="frozen-banner" hidden>
+    <b>FINAL</b>
+    <span>The leaderboard is frozen. The file present at the deadline is final.</span>
+  </div>
+
+  <div class="stat-row" id="stats"></div>
+
+  <div class="layout-split">
+    <div>
+      <section class="card">
+        <div class="card-head">
+          <h2>Leaderboard</h2>
+          <span class="chip mute" id="boardCount">–</span>
+          <div class="spacer"></div>
+          <a class="btn" href="/api/leaderboard.csv" download>Download CSV</a>
+        </div>
+        <div class="scroll-hint">Scroll the table to see all metrics →</div>
+        <div id="boardWrap" role="region" aria-label="Leaderboard results" tabindex="0"></div>
+      </section>
+    </div>
+
+    <aside>
+      <section class="card" style="margin-bottom:16px">
+        <div class="card-head"><h2>Recent activity</h2></div>
+        <ul class="feed" id="feed"><li class="m">waiting for the first upload …</li></ul>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>How you are ranked</h2></div>
+        <div class="card-body" style="font-size:13.5px;color:var(--ink-2)">
+          <p style="margin:0 0 10px">Errors are measured in the local East–North–Up
+             frame at the reference position. Epochs are matched by
+             <b>GPS week + time of week</b>.</p>
+          <ul style="margin:0 0 10px;padding-left:18px;line-height:1.7">
+            <li>Ranked only if <b>availability ≥ <span id="availMin">90</span>&thinsp;%</b></li>
+            <li>Sorted by <b>2D RMSE</b>, ties by <b>3D RMSE</b></li>
+            <li>2D P95 is shown next to it</li>
+            <li>Only your <b>current file</b> is evaluated</li>
+          </ul>
+          <p style="margin:0"><a href="/rules">Full submission rules →</a></p>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <div class="chart-grid">
+    <section class="card">
+      <div class="card-head"><h2>2D RMSE by group</h2></div>
+      <div class="card-body"><div class="chart tall" id="chartBar"></div></div>
+    </section>
+    <section class="card">
+      <div class="card-head">
+        <h2>Availability vs accuracy</h2>
+        <div class="spacer"></div>
+        <span class="chip mute">grey zone = not ranked</span>
+      </div>
+      <div class="card-body"><div class="chart tall" id="chartScatter"></div></div>
+    </section>
+  </div>
+</main>
+
+<footer class="page-foot">
+  <span>AAE4203 · GNSS Positioning Laboratory · benchmark challenge</span>
+  <span id="footStamp"></span>
+</footer>
+
+<script src="/static/assets/echarts.min.js"></script>
+<script src="/static/assets/app.js"></script>
+<script>
+(function () {
+  let barChart = null;
+  let scatterChart = null;
+  let lastSignature = {};
+
+  const el = (id) => document.getElementById(id);
+
+  function signatureOf(row) {
+    return [row.status, row.rmse2d, row.availability, row.method_label,
+            row.rank, row.submission_id].join('|');
+  }
+
+  // ---------------------------------------------------------------- sorting
+  function rankSort(a, b) { return (a.rank || 999) - (b.rank || 999); }
+
+  function otherSort(a, b) {
+    const aOk = a.status === 'ok' ? 0 : 1;
+    const bOk = b.status === 'ok' ? 0 : 1;
+    if (aOk !== bOk) return aOk - bOk;
+    const ar = a.rmse2d === null || a.rmse2d === undefined ? Infinity : a.rmse2d;
+    const br = b.rmse2d === null || b.rmse2d === undefined ? Infinity : b.rmse2d;
+    if (ar !== br) return ar - br;
+    return a.group.localeCompare(b.group);
+  }
+
+  // ---------------------------------------------------------------- table
+  function metricCell(value, cls) {
+    return `<span class="metric ${cls || ''}">${BENCH.fmt(value, 3)}</span>`;
+  }
+
+  function deltaMark(row) {
+    if (!row.rank || !row.rank_delta) return '';
+    const up = row.rank_delta > 0;
+    return `<span class="delta ${up ? 'up' : 'down'}">${up ? '▲' : '▼'}${Math.abs(row.rank_delta)}</span>`;
+  }
+
+  function rankedRow(row) {
+    const avail = row.availability === null ? 0 : row.availability;
+    const medal = row.rank === 1 ? 'p1' : row.rank === 2 ? 'p2' : row.rank === 3 ? 'p3' : '';
+    const flag = row.suspicious
+      ? `<span class="flag" title="${BENCH.esc(row.suspicious_reason)}">!</span>` : '';
+    return `
+      <tr class="${medal}" data-group="${row.group}" data-sig="${BENCH.esc(signatureOf(row))}">
+        <td class="rank-cell"><span class="rank-badge">${row.rank}</span></td>
+        <td class="l"><span class="group-code">${row.group}</span>${flag}</td>
+        <td class="l"><span class="method ${row.method_label ? '' : 'empty'}"
+              title="${BENCH.esc(row.method_label || 'no method label')}">${BENCH.esc(row.method_label || 'not declared')}</span></td>
+        <td>${metricCell(row.rmse2d, 'lead')}${deltaMark(row)}</td>
+        <td>${metricCell(row.rmse3d)}</td>
+        <td>${metricCell(row.p95_2d)}</td>
+        <td><span class="pct">${BENCH.fmt(avail, 1)}%</span>
+            <div class="bar"><i style="width:${Math.min(100, avail).toFixed(1)}%"></i></div></td>
+      </tr>`;
+  }
+
+  function unrankedRow(row) {
+    const avail = row.availability === null ? null : row.availability;
+    const flag = row.suspicious
+      ? `<span class="flag" title="${BENCH.esc(row.suspicious_reason)}">!</span>` : '';
+    let reason = row.unranked_reason || '';
+    if (row.status === 'none') reason = 'no file uploaded yet';
+    if (row.last_good) {
+      reason += ` · last good result ${BENCH.fmt(row.last_good.rmse2d, 2)} m`;
+    }
+    const barWidth = avail === null ? 0 : Math.min(100, avail);
+    const methodLine = row.status === 'invalid' ? '' : `
+          <span class="method ${row.method_label ? '' : 'empty'}"
+                title="${BENCH.esc(row.method_label || 'no method label')}">${BENCH.esc(row.method_label || 'not declared')}</span>`;
+    return `
+      <tr class="unranked" data-group="${row.group}" data-sig="${BENCH.esc(signatureOf(row))}">
+        <td class="rank-cell"><span class="rank-badge">–</span></td>
+        <td class="l"><span class="group-code">${row.group}</span>${flag}</td>
+        <td class="l">${methodLine}
+          <span class="reason">${BENCH.esc(reason)}</span>
+        </td>
+        <td>${metricCell(row.rmse2d)}</td>
+        <td>${metricCell(row.rmse3d)}</td>
+        <td>${metricCell(row.p95_2d)}</td>
+        <td><span class="pct">${avail === null ? '–' : BENCH.fmt(avail, 1) + '%'}</span>
+            <div class="bar ${avail !== null && avail < 90 ? 'fail' : ''}"><i style="width:${barWidth.toFixed(1)}%"></i></div></td>
+      </tr>`;
+  }
+
+  const COLS = `<colgroup>
+      <col style="width:66px"><col style="width:88px"><col>
+      <col style="width:112px"><col style="width:112px"><col style="width:100px"><col style="width:124px">
+    </colgroup>`;
+
+  function renderBoard(data) {
+    const ranked = data.rows.filter((r) => r.is_ranked).sort(rankSort);
+    const notRanked = data.rows.filter((r) => !r.is_ranked);
+    const listed = notRanked.filter((r) => r.status !== 'none').sort(otherSort);
+    const pending = notRanked.filter((r) => r.status === 'none')
+      .map((r) => r.group).sort();
+
+    let body = `
+      <table class="board fixed">
+        ${COLS}
+        <thead><tr>
+          <th>Rank</th><th class="l">Group</th><th class="l">Version</th>
+          <th>2D RMSE (m)</th><th>3D RMSE (m)</th><th>2D P95 (m)</th><th>Availability</th>
+        </tr></thead>
+        <tbody>${ranked.map(rankedRow).join('')}</tbody>
+      </table>`;
+
+    if (ranked.length === 0) {
+      body = `<div class="empty-state">No group is ranked yet — the first valid
+              submission with availability ≥ ${data.challenge.availability_min_pct} takes the lead.</div>`;
+    }
+    if (listed.length || pending.length) {
+      const pendingRow = pending.length ? `
+        <tr class="unranked pending-row">
+          <td class="rank-cell"><span class="rank-badge">–</span></td>
+          <td class="l">–</td>
+          <td class="l" colspan="5">
+            <span class="reason">${pending.length} group${pending.length === 1 ? '' : 's'}
+              ${pending.length === 1 ? 'has' : 'have'} not uploaded yet:
+              ${pending.join(', ')}</span>
+          </td>
+        </tr>` : '';
+      body += `
+        <div class="section-rule">
+          Not ranked
+          <span class="hint">— availability below threshold, invalid file, or nothing uploaded</span>
+        </div>
+        <table class="board fixed">
+          ${COLS}
+          <thead><tr>
+            <th>Rank</th><th class="l">Group</th><th class="l">Version / reason</th>
+            <th>2D RMSE (m)</th><th>3D RMSE (m)</th><th>2D P95 (m)</th><th>Availability</th>
+          </tr></thead>
+          <tbody>${listed.map(unrankedRow).join('')}${pendingRow}</tbody>
+        </table>`;
+    }
+    el('boardWrap').innerHTML = body;
+
+    // flash the rows whose content changed since the previous render
+    const flash = [];
+    el('boardWrap').querySelectorAll('tr[data-group]').forEach((tr) => {
+      const group = tr.dataset.group;
+      const sig = tr.dataset.sig;
+      if (lastSignature[group] !== undefined && lastSignature[group] !== sig) flash.push(tr);
+      lastSignature[group] = sig;
+    });
+    flash.forEach((tr) => {
+      tr.classList.add('flash');
+      setTimeout(() => tr.classList.remove('flash'), 1700);
+    });
+
+    el('boardCount').textContent =
+      `${data.n_ranked} ranked · ${data.n_submitted}/${data.n_groups} submitted`;
+    el('availMin').textContent = data.challenge.availability_min.toFixed(0);
+    el('footStamp').textContent = `updated ${data.updated_at}`;
+    el('liveText').textContent = `live · ${data.updated_at.split(' ').pop()}`;
+    el('freezeBanner').hidden = !data.frozen;
+
+    renderStats(data, ranked);
+    renderCharts(data);
+  }
+
+  // ---------------------------------------------------------------- stats
+  function renderStats(data, ranked) {
+    const best = ranked.length ? ranked[0] : null;
+    const c = data.challenge;
+    const minutes = c.duration_s ? (c.duration_s / 60).toFixed(0) : '–';
+    const items = [
+      { label: 'Groups submitted', value: `${data.n_submitted}<small> / ${data.n_groups}</small>`,
+        foot: `${data.n_submitted - ranked.length} not ranked` },
+      { label: 'Ranked', value: `${data.n_ranked}`,
+        foot: `availability ≥ ${c.availability_min_pct}` },
+      { label: 'Best 2D RMSE', value: best ? `${BENCH.fmt(best.rmse2d, 2)}<small> m</small>` : '–',
+        foot: best ? `${best.group} · ${BENCH.fmt(best.rmse3d, 2)} m 3D` : 'no valid submission yet' },
+      { label: 'Benchmark', value: `${c.n_gt_epochs}<small> epochs</small>`,
+        foot: `GPS week ${(c.gps_week || []).join(', ')} · ${minutes} min` },
+    ];
+    el('stats').innerHTML = items.map((item) => `
+      <div class="stat">
+        <div class="label">${item.label}</div>
+        <div class="value num">${item.value}</div>
+        <div class="foot">${BENCH.esc(item.foot)}</div>
+      </div>`).join('');
+  }
+
+  // ---------------------------------------------------------------- charts
+  function niceMax(value) { return Math.ceil(value / 5) * 5 + 5; }
+
+  function renderCharts(data) {
+    if (!window.echarts) return;
+    if (!barChart) barChart = BENCH.chart(el('chartBar'));
+    if (!scatterChart) scatterChart = BENCH.chart(el('chartScatter'));
+
+    const rows = data.rows.filter((r) => r.rmse2d !== null && r.rmse2d !== undefined)
+      .sort((a, b) => a.rmse2d - b.rmse2d);
+
+    barChart.setOption(BENCH.baseChart({
+      grid: { left: 46, right: 16, top: 26, bottom: 34 },
+      xAxis: Object.assign({}, BENCH.axisStyle, {
+        type: 'category', data: rows.map((r) => r.group), splitLine: { show: false },
+      }),
+      yAxis: Object.assign({}, BENCH.axisStyle, {
+        type: 'value', name: 'm', nameTextStyle: { color: '#98a2b3' },
+        max: (value) => niceMax(value.max),
+      }),
+      tooltip: Object.assign({}, BENCH.baseChart().tooltip, {
+        formatter: (p) => {
+          const row = rows[p.dataIndex];
+          return `<b>${row.group}</b><br/>2D RMSE ${BENCH.fmt(row.rmse2d, 3)} m<br/>` +
+                 `3D RMSE ${BENCH.fmt(row.rmse3d, 3)} m<br/>` +
+                 `availability ${BENCH.fmt(row.availability, 1)} %` +
+                 (row.method_label
+                   ? `<br/><span style="opacity:.7">${BENCH.esc(row.method_label)}</span>` : '');
+        },
+      }),
+      series: [{
+        type: 'bar', barMaxWidth: 30,
+        data: rows.map((r) => ({
+          value: r.rmse2d,
+          itemStyle: { color: r.is_ranked ? '#c8102e' : '#cbd2dc',
+                       borderRadius: [3, 3, 0, 0] },
+        })),
+        label: { show: rows.length <= 22, position: 'top', fontSize: 9,
+                 color: '#667085', formatter: (p) => BENCH.fmt(p.value, 1) },
+      }],
+    }), true);
+
+    const points = data.rows.filter((r) => r.availability !== null && r.rmse2d !== null);
+    const rankedPts = points.filter((r) => r.is_ranked)
+      .map((r) => [r.availability, r.rmse2d, r.group]);
+    const outPts = points.filter((r) => !r.is_ranked)
+      .map((r) => [r.availability, r.rmse2d, r.group]);
+    const minAvail = Math.max(0,
+      Math.floor(Math.min(50, ...points.map((r) => r.availability))) - 5);
+
+    scatterChart.setOption(BENCH.baseChart({
+      grid: { left: 52, right: 26, top: 26, bottom: 42 },
+      xAxis: Object.assign({}, BENCH.axisStyle, {
+        type: 'value', name: 'availability (%)', nameLocation: 'middle', nameGap: 26,
+        nameTextStyle: { color: '#98a2b3', fontSize: 11 },
+        min: minAvail, max: 101,
+      }),
+      yAxis: Object.assign({}, BENCH.axisStyle, {
+        type: 'value', name: '2D RMSE (m)', nameTextStyle: { color: '#98a2b3', fontSize: 11 },
+        max: (value) => niceMax(value.max),
+      }),
+      tooltip: Object.assign({}, BENCH.baseChart().tooltip, {
+        formatter: (p) => `<b>${p.data[2]}</b><br/>availability ${p.data[0].toFixed(1)} %<br/>` +
+                          `2D RMSE ${p.data[1].toFixed(3)} m`,
+      }),
+      series: [
+        { type: 'scatter', data: rankedPts, symbolSize: 11,
+          itemStyle: { color: '#c8102e', opacity: .85 },
+          label: { show: true, position: 'right', fontSize: 10, color: '#475467',
+                   formatter: (p) => p.data[2] } },
+        { type: 'scatter', data: outPts, symbolSize: 11,
+          itemStyle: { color: '#98a2b3', opacity: .8 },
+          label: { show: true, position: 'right', fontSize: 10, color: '#98a2b3',
+                   formatter: (p) => p.data[2] },
+          markArea: {
+            silent: true,
+            itemStyle: { color: 'rgba(180, 35, 24, .05)' },
+            data: [[{ xAxis: minAvail, name: 'not ranked' },
+                    { xAxis: data.challenge.availability_min }]],
+          },
+        },
+      ],
+    }), true);
+  }
+
+  // ---------------------------------------------------------------- feed
+  function renderFeed(events) {
+    if (!events || !events.length) {
+      el('feed').innerHTML = '<li class="m">waiting for the first upload …</li>';
+      return;
+    }
+    el('feed').innerHTML = events.map((event) => {
+      const bad = event.kind === 'invalid' || event.kind === 'fairplay';
+      return `<li class="${bad ? 'bad' : ''}">
+        <span class="t num">${event.at_display}</span>
+        <span class="g">${event.group_code || ''}</span>
+        <span class="m" title="${BENCH.esc(event.message)}">${BENCH.esc(event.message)}</span>
+      </li>`;
+    }).join('');
+  }
+
+  // ---------------------------------------------------------------- boot
+  async function loadBoard() {
+    try {
+      const data = await BENCH.api('/api/leaderboard');
+      renderBoard(data);
+    } catch (err) {
+      el('liveText').textContent = 'disconnected';
+      el('liveDot').classList.add('off');
+    }
+  }
+
+  async function loadFeed() {
+    try {
+      const data = await BENCH.api('/api/recent');
+      renderFeed(data.events);
+    } catch (err) { /* ignore */ }
+  }
+
+  el('boardWrap').addEventListener('click', (event) => {
+    const tr = event.target.closest('tr[data-group]');
+    if (tr) window.location.href = '/group/' + tr.dataset.group;
+  });
+
+  const refresh = BENCH.debounce(() => { loadBoard(); loadFeed(); }, 250);
+
+  BENCH.connect((payload) => {
+    el('liveDot').classList.remove('off');
+    if (payload.type === 'hello') return;
+    refresh();
+  }, (up) => {
+    el('liveDot').classList.toggle('off', !up);
+    if (!up) el('liveText').textContent = 'reconnecting…';
+  });
+
+  loadBoard();
+  loadFeed();
+  setInterval(refresh, 30000);     // safety net if SSE is blocked by a proxy
+})();
+</script>
+</body>
+</html>

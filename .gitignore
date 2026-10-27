@@ -1,0 +1,39 @@
+# --- never commit these -----------------------------------------------------
+data/ground_truth/*.private.csv
+data/ground_truth/*.private.meta.json
+data/competition.db
+data/competition.db-shm
+data/competition.db-wal
+data/submissions/
+secrets/
+config.toml
+
+# --- generated --------------------------------------------------------------
+drive_mirror/
+demo_drive/
+replay_drive/
+shots/
+__pycache__/
+*.pyc
+*.log
+
+# Local review runs, uploads, and machine-specific setup
+.review/
+drive_test_uploads/
+REVIEW_RESULTS.txt
+tools/enable_wifi_test.ps1
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Classroom data and source material are distributed separately
+/data/
+/UrbanNav_whampoa_raw.txt
+/UrbanNav_20210521_GPS.nav
+/UrbanNav-HK-Deep-Urban-1.ublox.f9p.obs
+/AAE4203_Week9_GNSS_Lab_v10.pptx
+
+# --- keep -------------------------------------------------------------------
+!data/ground_truth/.gitkeep
