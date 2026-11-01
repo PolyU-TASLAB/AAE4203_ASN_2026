@@ -1,243 +1,243 @@
-# 使用手册 · GNSS Benchmark Challenge
+# User Manual · GNSS Benchmark Challenge
 
-启动 / 停止 / 日常维护。完整说明见 [README.md](README.md)，当天操作清单见
-[docs/TA_runbook.md](docs/TA_runbook.md)。
+Instructions for starting, stopping, and maintaining the server. See
+[README.md](README.md) for setup and [the TA runbook](docs/TA_runbook.md)
+for the classroom checklist.
 
----
+## Quick reference
 
-## 一页速查
+Run all commands from the project folder containing `run.py`.
 
-| 操作 | 命令 |
+| Task | Command or address |
 |---|---|
-| **启动** | 双击 `start.bat`，或在本目录执行 `python run.py` |
-| **停止** | 在运行窗口按 `Ctrl+C` |
-| **强制停止**（找不到窗口时） | `Get-NetTCPConnection -LocalPort 8080 -State Listen \| %{ Stop-Process -Id $_.OwningProcess -Force }` |
-| **检查配置** | `python run.py --check` |
-| **打开榜单** | http://127.0.0.1:8080/ |
-| **投影模式** | http://127.0.0.1:8080/tv |
-| **教师台** | http://127.0.0.1:8080/admin |
+| Start | Double-click `start.bat`, or run `python run.py` |
+| Stop | Press `Ctrl+C` in the server terminal |
+| Check configuration | `python run.py --check` |
+| Leaderboard | http://127.0.0.1:8080/ |
+| Projector view | http://127.0.0.1:8080/tv |
+| Submission guide | http://127.0.0.1:8080/rules |
+| Teacher console | http://127.0.0.1:8080/admin |
 
-所有命令都在项目文件夹（`E:\competition`）里执行。
+The loopback addresses above work only on the server computer, and only when
+it listens on loopback or all interfaces. For students, use the server's campus
+network address and the port printed at startup.
 
----
+## 1. Starting the server
 
-## 一、启动
+### Option A: Windows launcher
 
-### 方式 A：双击（推荐给不熟悉命令行的人）
+Double-click **`start.bat`** in the project folder. It locates Python, checks
+that Python 3.11 or newer is available, and starts the server. If startup fails,
+the window stays open so you can read the error.
 
-双击项目文件夹里的 **`start.bat`**。
+### Option B: Terminal
 
-它会自动找 Python、检查版本是否 ≥ 3.11，然后启动服务器。
-出错时窗口会停住并显示原因，不会一闪而过。
-
-### 方式 B：命令行
+Open a terminal in the project folder and run:
 
 ```powershell
-cd E:\competition
+python run.py --check
 python run.py
 ```
 
-### 方式 C：后台常驻（长期运行，关掉终端也不停）
+### Option C: Background operation
+
+On Windows, run from the project folder:
 
 ```powershell
-cd E:\competition
 Start-Process -FilePath 'python' -ArgumentList 'run.py' -WindowStyle Hidden
 ```
 
-在校园服务器上建议用 Windows 任务计划程序设为"开机启动"，或 Linux 上用 `nohup`：
+For an established classroom server, Windows Task Scheduler can start the
+service at boot. On Linux, a simple background launch is:
 
 ```bash
+mkdir -p data
 nohup python run.py > data/server.log 2>&1 &
 ```
 
-### 启动成功的样子
+### Confirming startup
 
-```
-====================================================================
-  AAE4203 - GNSS Benchmark Challenge
-====================================================================
-  Leaderboard    http://172.20.234.7:8080/
-  Projector      http://172.20.234.7:8080/tv
-  Student rules  http://172.20.234.7:8080/rules
-  Admin console  http://172.20.234.7:8080/admin
-  Local          http://127.0.0.1:8080/
---------------------------------------------------------------------
-  Challenge      UrbanNav Whampoa - SPP Benchmark
-  Benchmark      1534 epochs, GPS week 2158
-  ENU origin     22.301558, 114.190308
-  Ranked when    availability >= 90 %
-  Source         local mirror  E:\competition\drive_mirror
-  Polling        every 10 s
-  Database       E:\competition\data\competition.db
-====================================================================
-  Ctrl+C to stop
-```
+The startup banner lists the leaderboard, projector view, submission guide,
+admin console, reference dataset, source folder, polling interval, and database.
+Check these values before sharing the leaderboard address with students.
 
-把 `http://172.20.234.7:8080/` 那行（局域网地址）抄到黑板上，学生用手机或笔记本就能看。
+For campus access, bind to the computer's current campus IPv4 address using
+`--host`, and allow the selected TCP port through the firewall for the intended
+campus subnet. Students must use that address rather than `127.0.0.1`.
+Campus Wi-Fi addresses can change; update the bind address and firewall rule
+when this happens. Network isolation may still prevent access between devices.
 
-### 启动参数
+### Startup options
 
-| 参数 | 作用 |
+| Option | Purpose |
 |---|---|
-| `--port 8090` | 换端口（默认 8080，被占用时会自动往上试） |
-| `--host 127.0.0.1` | 只允许本机访问（默认 `0.0.0.0` 局域网可访问） |
-| `--check` | 只检查配置、真值、Drive 连通性，不启动服务 |
-| `--no-poller` | 只读数据库、不扫描新文件（演示或排查时用） |
-| `--config 其他.toml` | 用别的配置文件 |
+| `--port 8090` | Use a different port; the usual default is 8080. Check the startup banner for the actual port. |
+| `--host 127.0.0.1` | Allow access only from this computer. |
+| `--host CAMPUS_IPV4` | Listen on the specified campus interface; replace `CAMPUS_IPV4` with its actual address. |
+| `--check` | Validate configuration, reference data, and the submission source without starting the web server. |
+| `--no-poller` | Serve stored results without scanning for new files. |
+| `--config alternate.toml` | Load a different configuration file. |
 
----
+## 2. Stopping the server
 
-## 二、停止
+### Normal shutdown
 
-### 方式 A：正常停止（推荐）
+Press **`Ctrl+C`** in the terminal running the server. Wait until the command
+prompt returns. If launched with `start.bat`, closing that terminal also stops
+the foreground process; use `Ctrl+C` where possible.
 
-在跑着服务器的那个窗口里按 **`Ctrl+C`**。
+### If the terminal is missing or the process is unresponsive
 
-会看到：
+Identify the listener first. Do not stop an unrelated process using the same port.
 
-```
-^C
-shutting down ...
-```
-
-窗口回到命令提示符，进程已退出。
-
-### 方式 B：关掉窗口
-
-如果是用 `start.bat` 启动的，直接关闭那个命令行窗口。
-（如果窗口已经找不到了，用方式 C。）
-
-### 方式 C：强制停止（找不到窗口 / 卡住时）
-
-**Windows PowerShell：**
+On Windows PowerShell:
 
 ```powershell
 Get-NetTCPConnection -LocalPort 8080 -State Listen |
-    ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+    Select-Object LocalAddress, LocalPort, OwningProcess
 ```
 
-**或者用旧命令：**
+Inspect the reported process ID, then stop that confirmed server process:
 
 ```powershell
-netstat -ano | findstr :8080
-taskkill /PID <上面查到的PID> /F
+Get-Process -Id SERVER_PID
+Stop-Process -Id SERVER_PID
 ```
 
-**Linux / macOS：**
+Replace `SERVER_PID` with the actual numeric ID. Use `-Force` only if necessary.
+Alternatively, `netstat -ano | findstr :8080` lists listeners and their IDs.
+
+On Linux or macOS:
 
 ```bash
-pkill -f "run.py"
-# 或
-kill $(lsof -t -i:8080)
+lsof -nP -iTCP:8080 -sTCP:LISTEN
+kill SERVER_PID
 ```
 
-### 确认真的停了
+### Verify shutdown
+
+Request `/api/status` at the address on which the server was listening:
 
 ```powershell
 Invoke-WebRequest http://127.0.0.1:8080/api/status -TimeoutSec 3
 ```
 
-报"连接错误 / 无法连接"就是停了。能返回 JSON 说明还在跑。
+A connection failure is expected after shutdown. A JSON response means a server
+is still listening. Substitute the campus IP and actual port when applicable.
 
-### 停止会不会丢数据？
+### Data persistence
 
-**不会。** 每次上传都已归档到 `data/submissions/`，分数存在 `data/competition.db`。
-重启后榜单原样恢复。
+Stopping the server does not erase saved submissions. Archived CSV files are in
+`data/submissions/`, and submission records and scores are in
+`data/competition.db`. Keep both when moving or backing up the installation.
 
----
+## 3. Restarting
 
-## 三、重启
-
-停止后再启动即可，没有任何特殊步骤：
+Stop the existing process, then run the same startup command again:
 
 ```powershell
 python run.py
 ```
 
-重启后排名升降箭头会重置（它们表示"上一次刷新以来"的变化），分数和排名不受影响。
+Preserve any custom `--host`, `--port`, or `--config` options. Configuration
+changes require a restart. Startup re-evaluates current benchmark submissions
+from their archives, so keep the reference data and archive paths available.
+Rank-change arrows describe recent refreshes and may reset after a restart.
 
-**改了 `config.toml` 必须重启才生效。**
+## 4. Routine checks
 
----
-
-## 四、日常自检
-
-### 启动前/后跑一次
+### Configuration check
 
 ```powershell
 python run.py --check
 ```
 
-五行输出全 `OK` 就没问题：
+Check that configuration, ground truth, database, source, and web assets report
+`OK`. A source error can indicate an incorrect mirror path, unavailable Drive
+Desktop mount, or missing Drive API credentials or folder permissions.
 
-```
-config        OK
-ground truth  OK  1534 epochs, week [2158], origin 22.301558/114.190308
-database      OK  E:\competition\data\competition.db
-source        OK  local_mirror
-web assets    OK
-```
+### Runtime health
 
-`source` 那行失败时会直接告诉你是路径错了、还是 Drive 密钥没共享给服务账号。
+Open `/api/status` on the running server to inspect the polling status and
+latest error. The leaderboard's live indicator shows the connection state.
+If it displays `reconnecting`, check the server and network; the page also uses
+periodic polling as a fallback.
 
-### 运行中检查
-
-浏览器打开 http://127.0.0.1:8080/api/status，或看榜单右上角：
-
-- 绿点 + `live · HH:MM:SS` = 正常
-- 灰点 + `reconnecting…` = 推送断了（刷新页面即可，30 秒会自动兜底轮询）
-
-### 跑单元测试
+### Unit tests
 
 ```powershell
-python -m unittest discover -s tests
+python -m unittest discover -s tests -v
 ```
 
-应该是 `Ran 25 tests ... OK`。
+All tests should finish with `OK`. See [validation notes](docs/validation.md)
+for the recorded test results and integration-test prerequisites.
 
----
+## 5. Troubleshooting
 
-## 五、常见问题
-
-| 现象 | 原因与处理 |
+| Symptom | What to check |
 |---|---|
-| `'python' 不是内部或外部命令` | Python 没装或没加进 PATH。装 3.11+ 并勾选 "Add python.exe to PATH"，或直接用 `start.bat` |
-| `Python 3.11 or newer is required` | 版本太旧，装新版 |
-| `端口被占用` / 启动后打不开网页 | 换端口：`python run.py --port 8090` |
-| 红字 `SOURCE NOT AVAILABLE` | Drive 目录不存在或没同步下来。网站仍可用（读旧数据），改好路径重启 |
-| 上传了但榜单不动 | ① Drive 还没同步（等 10 秒）② 文件内容和上次完全一样（会被跳过，这是设计如此）③ 看 `/admin` 的 event log |
-| 榜单某行是 `–` | 可用率低于 90%、文件无效、或还没上传，行内会写原因 |
-| 某行出现红色 `!` | 防作弊标记，只提醒不扣分；点进组页面看原因 |
-| 页面打不开但进程在 | 防火墙拦了 8080；或用了 `--host 127.0.0.1` 导致别人连不上 |
+| Python is not recognized | Install Python 3.11 or newer and add it to PATH, or try `start.bat`. |
+| `Python 3.11 or newer is required` | Select a supported Python interpreter. |
+| Port is occupied | Use another port, for example `python run.py --port 8090`, and check the actual startup address. |
+| `SOURCE NOT AVAILABLE` | Check the configured source folder and Drive synchronization, then restart after correcting the configuration. |
+| Upload does not appear | Confirm Drive Desktop has synchronized the file locally, check the exact filename and matching group folder, and inspect the admin event log. Polling normally runs every 10 seconds after synchronization. |
+| A file is ignored | Replace the group placeholder: group 79 must use `G79/G79_benchmark.csv`, not `G79/GXX_benchmark.csv`. Backup names and duplicate-copy suffixes are ignored. |
+| Identical replacement has no new result | Unchanged CSV content does not create a new scored version. |
+| Rank is shown as a dash | Availability is below 90%, the CSV is invalid, or no benchmark has been submitted. Read the row's explanation. |
+| A warning marker appears | Open the group page for the diagnostic reason; the marker itself does not deduct marks. |
+| Students cannot open the page | Check the bind address, current campus IP, firewall rule, port, and campus network isolation. Loopback binding permits only local access. |
 
-更详细的故障处理见 [docs/TA_runbook.md](docs/TA_runbook.md)。
+Both `GXX_benchmark.csv` and `GXX_owndata.csv` are required deliverables in the
+matching group folder. Only the benchmark determines leaderboard rank. Follow
+[the submission guide](web/rules.html) for the exact CSV format; when the server
+is running, open `/rules` for the rendered guide and current dataset information.
 
----
+See [the TA runbook](docs/TA_runbook.md) for additional operational guidance.
 
-## 六、数据在哪里 / 怎么备份
+## 6. Storage and backups
 
-| 路径 | 内容 | 要不要备份 |
+| Location | Contents | Back up? |
 |---|---|---|
-| `data/competition.db` | 全部提交记录与分数 | **要** |
-| `data/submissions/` | 每次上传的原始 CSV（带 SHA-256 文件名） | **要** |
-| `data/ground_truth/` | 真值（答案，绝不能外泄） | **要，且保密** |
-| `drive_mirror/` | 被监听的文件夹 | 不用（Drive 上有） |
-| `demo_drive/` | 模拟数据 | 不用 |
+| `data/competition.db` | Submission history and scores | Yes |
+| `data/submissions/` | Archived uploaded CSV files | Yes |
+| `data/ground_truth/` | Reference data used for scoring | Yes; keep access controlled |
+| Configured Drive mirror | Synchronized source files | Confirm cloud copies and synchronization before relying on them |
+| `demo_drive/` | Generated demonstration fixtures | Usually reproducible |
 
-整个 `data/` 文件夹拷走就是完整备份。停止服务后再拷最稳妥。
+Stop the server before copying the complete `data/` directory for a consistent
+backup. Also retain your local configuration and any required credentials in a
+secure location outside the public repository. Existing archive paths may need
+to be repaired if the installation moves to a different drive or directory.
 
-**清空重来**（换真实数据前）：
+### Starting a new competition
+
+Back up the existing database and archives first. Use a separate installation
+or explicitly selected empty data directory for a new competition rather than
+mixing demonstration records with student submissions. Do not clear a live
+Drive-synchronized submission folder as part of a local reset.
+
+## 7. Before collecting real submissions
+
+1. Set a strong `admin_token` in `config.toml`; do not use `change-me-please`.
+2. Select the intended source kind and configure its mirror path or Drive folder ID.
+3. Confirm the correct reference dataset and group settings.
+4. Preserve previous data and prepare a clean competition database if needed.
+5. Run `python run.py --check` and resolve any errors.
+6. Start the server and verify source status, the submission guide, and access
+   from another student device on the intended network.
+7. Upload a clearly identified test submission, verify scoring and live updates,
+   and keep test records separate from official submissions.
+
+## Separate Drive test server
+
+The optional `tools/live_drive_test.py` utility uses a persistent test database
+under `.review/drive-live/data/`, rather than `data/competition.db`. Its archived
+submissions are also stored under that test directory. Back up the directory
+used by the server you actually run. For example, local testing uses:
 
 ```powershell
-Remove-Item -Recurse -Force data\competition.db*, data\submissions, drive_mirror\*
+python tools/live_drive_test.py --host 127.0.0.1 --port 8080
 ```
 
----
-
-## 七、换成真实数据前必做
-
-1. 改 `config.toml` 里的 `admin_token`（别用默认的 `change-me-please`）
-2. 改 `[sources]` 指向真实的 Drive 文件夹（`local_mirror` 或 `gdrive_api`）
-3. 清掉演示数据（见上）
-4. `python run.py --check` 全绿
-5. 启动，确认榜单是空的、`/admin` 里 source 状态正常
+Press `Ctrl+C` to stop it. To resume the same test leaderboard, restart this
+utility with the same configuration and data directory.

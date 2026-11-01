@@ -332,7 +332,7 @@ tests/               Unit and regression tests
 docs/                Scoring documentation and teaching assistant runbook
 ```
 
-For classroom operation, see [the Chinese manual](MANUAL.md) and [the TA runbook](docs/TA_runbook.md).
+For classroom operation, see [the user manual](MANUAL.md) and [the TA runbook](docs/TA_runbook.md).
 
 ## Initialize this project on GitHub
 
